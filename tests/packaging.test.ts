@@ -15,6 +15,9 @@ it("ships the Cursor skill and documents npm and SHA-pinned installation", () =>
     true,
   );
   expect(readme).toContain("npm package is not currently published");
+  expect(readme).toContain(
+    "https://github.com/ebarron/test-guard/archive/${TEST_GUARD_SHA}.tar.gz",
+  );
   expect(readme).toContain("raw.githubusercontent.com/ebarron/test-guard/");
   expect(readme).toContain("${TEST_GUARD_SHA}");
   expect(readme).toContain(

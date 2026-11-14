@@ -27,7 +27,8 @@ a repository:
 
 ```sh
 TEST_GUARD_SHA=<reviewed-40-character-commit-sha>
-npm install --save-dev "github:ebarron/test-guard#${TEST_GUARD_SHA}"
+npm install --save-dev \
+  "https://github.com/ebarron/test-guard/archive/${TEST_GUARD_SHA}.tar.gz"
 npx --no-install test-guard init --preset typescript
 ```
 
