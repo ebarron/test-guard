@@ -1,0 +1,60 @@
+version: 1
+production:
+  include: ["src/**/*.ts"]
+  exclude:
+    - src/types.ts
+    - src/index.ts
+    - src/action.ts
+    - "**/*.d.ts"
+    - "**/{node_modules,dist,coverage}/**"
+fileClasses:
+  typescript:
+    extensions: [.ts, .tsx, .js, .jsx, .mts, .cts]
+    testGlobs:
+      - "**/*.test.{ts,tsx,js,jsx,mts,cts}"
+      - "**/*.spec.{ts,tsx,js,jsx,mts,cts}"
+      - "**/__tests__/**/*.{ts,tsx,js,jsx,mts,cts}"
+  go:
+    extensions: [.go]
+    testGlobs: ["**/*_test.go"]
+  python:
+    extensions: [.py]
+    testGlobs: ["**/test_*.py", "**/*_test.py"]
+companions:
+  typescript:
+    strategy: colocated
+    directories: [., /tests]
+    suffixes: [.test, .spec]
+  go:
+    strategy: go-package
+    directories: [.]
+    suffixes: [_test]
+  python:
+    strategy: python-test-name
+    directories: [., tests]
+    suffixes: [test_]
+mockBoundaries:
+  internalPrefixes: ["@/", ./, ../]
+  allowModules: [fs, "node:*"]
+  boundaryGlobs: ["**/api", "**/*.api"]
+rules:
+  missing-test: error
+  test-removed: error
+  test-count: error
+  assertion-count: error
+  test-modifier: error
+  matcher-weakened: error
+  policy-change: error
+  shallow-assertion: error
+  internal-mock: error
+  inline-fetch-mock: warning
+  test-id-over-role: warning
+  playwright-api-stub: error
+baseline: .testguard-baseline.json
+defaultBase: origin/main
+waivers:
+  minimumReasonWords: 3
+inlineFetchMockThreshold: 3
+playwright:
+  testGlobs: ["**/e2e/**/*.spec.ts"]
+  apiPathFragments: ["/api/", "/v1/"]

@@ -1,0 +1,173 @@
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
+import YAML from "yaml";
+import { describe, expect, it } from "vitest";
+import { parseConfig, renderPreset } from "../src/config.js";
+import {
+  companionTestPaths,
+  isGeneratedGo,
+  isProductionPath,
+  isTestPath,
+  productionAffectedByDeletedTest,
+} from "../src/files.js";
+import {
+  testConfig,
+  temporary,
+  useTemporaryRepository,
+  write,
+} from "./helpers.js";
+
+useTemporaryRepository();
+
+describe("configuration", () => {
+  it("round-trips both documented presets", () => {
+    expect(parseConfig(YAML.parse(renderPreset("polyglot"))).version).toBe(1);
+    expect(parseConfig(YAML.parse(renderPreset("typescript"))).version).toBe(1);
+  });
+
+  it("rejects unknown keys and mismatched strategies", () => {
+    const value = testConfig() as unknown as Record<string, unknown>;
+    value.extra = true;
+    expect(() => parseConfig(value)).toThrow(/unrecognized key/i);
+
+    const wrong = testConfig();
+    wrong.companions.go.strategy = "colocated";
+    expect(() => parseConfig(wrong)).toThrow(/go\.strategy must be go-package/);
+  });
+
+  it("rejects an unsafe waiver minimum", () => {
+    const config = testConfig();
+    config.waivers.minimumReasonWords = 1;
+    expect(() => parseConfig(config)).toThrow(/minimumReasonWords/);
+  });
+
+  it("does not allow policy-change review to be disabled", () => {
+    const config = testConfig();
+    config.rules["policy-change"] = "off";
+    expect(() => parseConfig(config)).toThrow(/policy-change cannot be off/);
+  });
+
+  it("rejects escaping config paths while preserving root-relative companions", () => {
+    const escapedBaseline = testConfig();
+    escapedBaseline.baseline = "../outside.json";
+    expect(() => parseConfig(escapedBaseline)).toThrow(
+      /baseline.*repository-relative/i,
+    );
+
+    const absoluteBaseline = testConfig();
+    absoluteBaseline.baseline = "/tmp/outside.json";
+    expect(() => parseConfig(absoluteBaseline)).toThrow(
+      /baseline.*repository-relative/i,
+    );
+
+    const escapedCompanion = testConfig();
+    escapedCompanion.companions.typescript.directories = ["../tests"];
+    expect(() => parseConfig(escapedCompanion)).toThrow(
+      /companions\.typescript\.directories/i,
+    );
+
+    const absoluteCompanion = testConfig();
+    absoluteCompanion.companions.typescript.directories = ["C:\\tests"];
+    expect(() => parseConfig(absoluteCompanion)).toThrow(
+      /companions\.typescript\.directories/i,
+    );
+
+    const rootRelative = testConfig();
+    rootRelative.companions.typescript.directories = ["/tests"];
+    expect(parseConfig(rootRelative).companions.typescript.directories).toEqual(
+      ["/tests"],
+    );
+  });
+});
+
+describe("classification and companions", () => {
+  it("classifies production and test paths from configuration", () => {
+    const config = testConfig();
+    expect(isProductionPath("pkg/store.go", config)).toBe(true);
+    expect(isProductionPath("src/Widget.tsx", config)).toBe(true);
+    expect(isProductionPath("scripts/tool.py", config)).toBe(true);
+    expect(isProductionPath("src/Widget.test.tsx", config)).toBe(false);
+    expect(isProductionPath("pkg/store_test.go", config)).toBe(false);
+    expect(isTestPath("ui/e2e/catalog.spec.ts", config)).toBe(true);
+    expect(isProductionPath("pkg/zz_generated.deep.go", config)).toBe(false);
+  });
+
+  it("maps Go package, suffixed colocated TSX, and Python test_name companions", () => {
+    const config = testConfig();
+    write("pkg/a.go", "package pkg\n");
+    write("pkg/a_test.go", "package pkg\n");
+    write("src/Widget.tsx", "export const Widget = 1;\n");
+    write("src/__tests__/Widget.resilience.test.tsx", 'it("x", () => {});\n');
+    write("scripts/tool.py", "def run(): return 1\n");
+    write("scripts/tests/test_tool.py", "def test_run(): assert True\n");
+
+    expect(companionTestPaths("pkg/a.go", temporary, config)).toEqual([
+      "pkg/a_test.go",
+    ]);
+    expect(companionTestPaths("src/Widget.tsx", temporary, config)).toContain(
+      "src/__tests__/Widget.resilience.test.tsx",
+    );
+    expect(companionTestPaths("scripts/tool.py", temporary, config)).toContain(
+      "scripts/tests/test_tool.py",
+    );
+  });
+
+  it("maps deleted colocated and package tests back to production", () => {
+    const config = testConfig();
+    const production = [
+      "pkg/a.go",
+      "pkg/b.go",
+      "src/Widget.tsx",
+      "src/Other.ts",
+    ];
+    expect(
+      productionAffectedByDeletedTest("pkg/a_test.go", production, config),
+    ).toEqual(["pkg/a.go", "pkg/b.go"]);
+    expect(
+      productionAffectedByDeletedTest(
+        "src/Widget.resilience.test.tsx",
+        production,
+        config,
+      ),
+    ).toEqual(["src/Widget.tsx"]);
+  });
+
+  it("recognizes only the standard generated Go header", () => {
+    write(
+      "pkg/generated.go",
+      "// Code generated by fixture; DO NOT EDIT.\npackage pkg\n",
+    );
+    write(
+      "pkg/ordinary.go",
+      '// This documentation mentions Code generated but is ordinary.\npackage pkg\nconst Note = "ignore_autogenerated"\n',
+    );
+    expect(isGeneratedGo("pkg/generated.go", temporary)).toBe(true);
+    expect(isGeneratedGo("pkg/ordinary.go", temporary)).toBe(false);
+  });
+
+  it("rejects companion symlinks that resolve outside the repository", () => {
+    const outside = fs.mkdtempSync(
+      path.join(os.tmpdir(), "test-guard-companion-"),
+    );
+    try {
+      write("src/Widget.tsx", "export const Widget = 1;\n");
+      fs.writeFileSync(
+        path.join(outside, "Widget.test.tsx"),
+        'it("outside", () => {});\n',
+      );
+      fs.mkdirSync(path.join(temporary, "src/__tests__"), {
+        recursive: true,
+      });
+      fs.symlinkSync(
+        path.join(outside, "Widget.test.tsx"),
+        path.join(temporary, "src/__tests__/Widget.test.tsx"),
+      );
+      expect(() =>
+        companionTestPaths("src/Widget.tsx", temporary, testConfig()),
+      ).toThrow(/resolves outside the repository root/);
+    } finally {
+      fs.rmSync(outside, { recursive: true, force: true });
+    }
+  });
+});

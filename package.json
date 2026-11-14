@@ -1,0 +1,77 @@
+{
+  "name": "@edjbarron/test-guard",
+  "version": "0.1.0",
+  "description": "Deterministic, advisory test-integrity scanner and GitHub Action",
+  "license": "MIT",
+  "author": "Ed Barron",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/ebarron/test-guard.git"
+  },
+  "bugs": {
+    "url": "https://github.com/ebarron/test-guard/issues"
+  },
+  "homepage": "https://github.com/ebarron/test-guard#readme",
+  "type": "module",
+  "engines": {
+    "node": ">=22"
+  },
+  "bin": {
+    "test-guard": "dist/cli.js",
+    "testguard": "dist/cli.js"
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "skills",
+    "action.yml",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "build": "npm run clean && tsc -p tsconfig.build.json && npm run build:action",
+    "build:action": "esbuild src/action.ts --bundle --platform=node --target=node22 --format=cjs --outfile=dist/action/index.cjs",
+    "check:action": "node scripts/check-action-bundle.mjs",
+    "clean": "node -e \"require('node:fs').rmSync('dist',{recursive:true,force:true})\"",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "lint": "eslint .",
+    "test": "vitest run",
+    "test:action": "node scripts/action-smoke.mjs",
+    "typecheck": "tsc --noEmit",
+    "prepack": "npm run build"
+  },
+  "dependencies": {
+    "minimatch": "11.0.8",
+    "typescript": "5.9.3",
+    "yaml": "2.9.1",
+    "zod": "4.6.7"
+  },
+  "devDependencies": {
+    "@eslint/js": "10.0.1",
+    "@types/node": "24.19.2",
+    "esbuild": "0.25.12",
+    "eslint": "10.15.0",
+    "prettier": "3.10.1",
+    "typescript-eslint": "8.72.2",
+    "vitest": "4.1.12"
+  },
+  "overrides": {
+    "minimatch": "11.0.8"
+  },
+  "keywords": [
+    "testing",
+    "static-analysis",
+    "github-action",
+    "cursor-skill"
+  ],
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
+  }
+}

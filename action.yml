@@ -1,0 +1,38 @@
+name: test-guard
+description: Advisory test-integrity scan for changed or staged files
+author: Ed Barron
+branding:
+  icon: shield
+  color: blue
+inputs:
+  mode:
+    description: Scan scope (diff, staged, or all)
+    required: false
+    default: diff
+  base:
+    description: Git base ref for diff mode; defaults to .testguard.yml
+    required: false
+  config:
+    description: Configuration path relative to repository root
+    required: false
+    default: .testguard.yml
+  baseline:
+    description: Optional baseline path override
+    required: false
+  format:
+    description: Output format (human, json, sarif, or github)
+    required: false
+    default: github
+  pr_body:
+    description: Optional PR body override; waivers still require approval_label
+    required: false
+  approval_label:
+    description: Pull-request label required before body waivers are applied
+    required: false
+    default: "test-guard:waiver-approved"
+outputs:
+  exit-code:
+    description: Scanner exit code (0 clean, 1 findings, 2 failure)
+runs:
+  using: node24
+  main: dist/action/index.cjs
